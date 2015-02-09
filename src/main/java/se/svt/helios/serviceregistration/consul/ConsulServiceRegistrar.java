@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 SVT AB.
+ * Copyright (c) 2015 SVT AB.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
