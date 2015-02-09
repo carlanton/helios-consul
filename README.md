@@ -29,17 +29,17 @@ endpoint protocol.
 
     helios create \
         --port default=8080/tcp \
-        --register my-shiny-webservice-v2/http=default \
-        google/python-hello:2.7 \
-        my-shiny-webservice:v2
+        --register my-shiny-webservice-v1/http=default \
+        my-shiny-webservice:v1 \
+        google/python-hello:2.7
 
-    helios deploy my-shiny-webservice:v2 some-helios-agent
+    helios deploy my-shiny-webservice:v1 some-helios-agent
 
 The Helios agent will then register the following service in Consul:
 
-    ServiceId:   my-shiny-webservice-v2
+    ServiceId:   my-shiny-webservice-v1
     ServiceName: my-shiny-webservice
-    Tags:        [v2, protocol-http, helios-deployed]
+    Tags:        [v1, protocol-http, helios-deployed]
 
 ## Consul health checks
 
