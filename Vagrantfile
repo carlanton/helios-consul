@@ -19,23 +19,22 @@ Vagrant.configure("2") do |config|
   pkg_cmd << "set -x; "
 
   # install other helios dependencies and development tools
-  pkg_cmd << "apt-get update && apt-get install -y default-jdk zookeeperd=3.4.5+dfsg-1 unzip; "
-
-  # install helios
-  pkg_cmd << <<-END.gsub(/^ {4}/, '')
-    wget -q -O /tmp/helios-deb.tar.gz 'https://github.com/spotify/helios/releases/download/0.8.163/helios-debs.tar.gz' && \
-    wget -q -O /tmp/helios-consul.deb 'https://github.com/SVT/helios-consul/releases/download/0.24/helios-consul_0.24_all.deb' && \
-    cd /tmp && tar xf helios-deb.tar.gz && dpkg -i *.deb ;
-    END
+  pkg_cmd << "apt-get update && apt-get install -y openjdk-7-jre zookeeperd software-properties-common; "
 
   # make sure zk is running
   pkg_cmd << "initctl start zookeeper ;"
 
   # Install and enable Consul
-  pkg_cmd << "wget -q -O /tmp/consul-ui.zip 'https://dl.bintray.com/mitchellh/consul/0.4.1_web_ui.zip' ;"
-  pkg_cmd << "wget -q -O /tmp/consul.zip 'https://dl.bintray.com/mitchellh/consul/0.4.1_linux_amd64.zip' ;"
-  pkg_cmd << "cd /tmp && unzip consul.zip && cp consul /usr/bin/consul && unzip consul-ui.zip ;"
-  pkg_cmd << "consul agent -data-dir /tmp/consul-data -ui-dir /tmp/dist -server -bootstrap-expect 1 -client 0.0.0.0 -dc vagrant -syslog &> /dev/null & disown ;"
+  pkg_cmd << "apt-add-repository ppa:bcandrea/consul --yes && apt-get update && apt-get install -y consul consul-web-ui ;"
+  pkg_cmd << <<-END.gsub(/^ {4}/, '')
+    echo '{
+      "disable_update_check": true,
+      "server": true,
+      "datacenter": "vagrant",
+      "bootstrap_expect" : 1
+    }' > /etc/consul.d/30-single-master.json ;
+    END
+  pkg_cmd << "service consul restart ; "
 
   # install docker
   pkg_cmd << "curl -s https://get.docker.io/gpg | apt-key add -; "
@@ -73,8 +72,12 @@ Vagrant.configure("2") do |config|
     echo '{"masterEndpoints":["http://localhost:5801"]}' > /home/vagrant/.helios/config;
     END
 
-  pkg_cmd << "initctl start helios-master ;"
-  pkg_cmd << "initctl start helios-agent ;"
+  # Install helios and helios-consul
+  pkg_cmd << <<-END.gsub(/^ {4}/, '')
+    wget -q -O /tmp/helios-deb.tar.gz 'https://github.com/spotify/helios/releases/download/0.8.163/helios-debs.tar.gz' && \
+    wget -q -O /tmp/helios-consul.deb 'https://github.com/SVT/helios-consul/releases/download/0.24/helios-consul_0.24_all.deb' && \
+    cd /tmp && tar xf helios-deb.tar.gz && dpkg --force-confdef --force-confold -i *.deb ;
+    END
 
   config.vm.provision :shell, :inline => pkg_cmd
 end
