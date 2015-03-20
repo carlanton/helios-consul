@@ -133,7 +133,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
             throws JsonProcessingException {
 
         for (final ServiceRegistration.Endpoint endpoint : registration.getEndpoints()) {
-            List<String> tags = new ArrayList<>();
+            List<String> tags = new ArrayList<>(endpoint.getTags());
 
             // Add version as a tag
             String versionTag = getVersionTag(endpoint.getName());
