@@ -23,7 +23,7 @@ public class ServiceRegistrarTest {
     private final static String CHECK_SCRIPT = "/bin/true";
     private final static String CHECK_INTERVAL = "5s";
     private final static ServiceRegistration.Endpoint ENDPOINT =
-            new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com");
+            new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", null);
 
     @Mock
     ConsulClient consulClient;
@@ -57,11 +57,6 @@ public class ServiceRegistrarTest {
         verify(consulClient).register((Service) anyObject());
         verify(consulClient).deregister(ENDPOINT.getName());
         verify(consulClient).close();
-    }
-
-    @Test
-    public void testClose() throws Exception {
-
     }
 
     @Test

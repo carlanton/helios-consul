@@ -31,6 +31,7 @@ import com.spotify.helios.serviceregistration.ServiceRegistration;
 import com.spotify.helios.serviceregistration.ServiceRegistrationHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import se.svt.helios.serviceregistration.consul.model.AgentService;
 import se.svt.helios.serviceregistration.consul.model.Service;
 
 import java.util.*;
@@ -40,6 +41,8 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static com.google.common.collect.Lists.newArrayList;
 
 public class ConsulServiceRegistrar implements ServiceRegistrar {
     private static final Logger log = LoggerFactory.getLogger(ConsulServiceRegistrar.class);
@@ -133,16 +136,18 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
             throws JsonProcessingException {
 
         for (final ServiceRegistration.Endpoint endpoint : registration.getEndpoints()) {
-            List<String> tags = new ArrayList<>(endpoint.getTags());
+            // Indicate that this service is deployed by Helios
+            List<String> tags = newArrayList(HELIOS_DEPLOYED_TAG);
+
+            if (endpoint.getTags() != null) {
+                tags.addAll(endpoint.getTags());
+            }
 
             // Add version as a tag
             String versionTag = getVersionTag(endpoint.getName());
             if (versionTag != null) {
                 tags.add(versionTag);
             }
-
-            // Indicate that this service is deployed by Helios
-            tags.add(HELIOS_DEPLOYED_TAG);
 
             // Add the protocol as a tag
             tags.add(String.format("protocol-%s", endpoint.getProtocol()));
@@ -196,7 +201,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
 
     void syncState() {
         // 1. List all my services with tag HELIOS_DEPLOYED_TAG
-        List<String> registeredServices = null;
+        Map<String, AgentService> registeredServices = null;
         try {
             registeredServices = consulClient.getAgentServicesWithTag(HELIOS_DEPLOYED_TAG);
         } catch (Exception e) {
@@ -208,7 +213,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
         }
 
         // 2. De-register all services not known by Helios
-        for (String service : registeredServices) {
+        for (String service : registeredServices.keySet()) {
             if (!endpoints.contains(service)) {
                 log.info("Service '{}' not known by Helios. Sending deregistration.", service);
                 consulClient.deregister(service);
@@ -218,7 +223,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
         // 3. Register all services not known by Consul
         for (ServiceRegistration handle : handles.values()) {
             for (ServiceRegistration.Endpoint endpoint : handle.getEndpoints()) {
-                if (!registeredServices.contains(endpoint.getName())) {
+                if (!registeredServices.containsKey(endpoint.getName())) {
                     log.info("Service '{}' not known by Consul. Re-registering Helios job.",
                              endpoint.getName());
                     try {

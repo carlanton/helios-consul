@@ -24,6 +24,9 @@ package se.svt.helios.serviceregistration.consul;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
@@ -38,7 +41,7 @@ import se.svt.helios.serviceregistration.consul.model.AgentService;
 import se.svt.helios.serviceregistration.consul.model.Service;
 
 import java.net.URI;
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
@@ -105,19 +108,20 @@ public class ConsulClient implements AutoCloseable {
         httpClient.close();
     }
 
-    public List<String> getAgentServicesWithTag(String tag) throws Exception {
+    public Map<String, AgentService> getAgentServicesWithTag(final String tag) throws Exception {
         HttpResponse response = agentServices().get();
         Map<String, AgentService> myServices = OBJECT_MAPPER.readValue(
                 response.getEntity().getContent(),
-                new TypeReference<Map<String, AgentService>>() { });
+                new TypeReference<Map<String, AgentService>>() {
+                });
 
-        List<String> taggedServices = new ArrayList<>();
-        for (AgentService agentService : myServices.values()) {
-            if (agentService.getTags() != null && agentService.getTags().contains(tag)) {
-                taggedServices.add(agentService.getId());
-            }
-        }
-        return taggedServices;
+        return ImmutableMap.copyOf(Maps.filterValues(
+                myServices, new Predicate<AgentService>() {
+                    @Override
+                    public boolean apply(AgentService service) {
+                        return service.getTags() != null && service.getTags().contains(tag);
+                    }
+                }));
     }
 
     private static class RequestCallback implements FutureCallback<HttpResponse> {
