@@ -30,8 +30,8 @@ endpoint protocol.
     helios create \
         --port default=8080/tcp \
         --register my-shiny-webservice-v2/http=default \
-        google/python-hello:2.7 \
-        my-shiny-webservice:v2
+        my-shiny-webservice:v2 \
+        google/python-hello:2.7
 
     helios deploy my-shiny-webservice:v2 some-helios-agent
 
