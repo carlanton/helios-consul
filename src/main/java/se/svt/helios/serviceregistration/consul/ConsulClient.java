@@ -83,6 +83,8 @@ public class ConsulClient implements AutoCloseable {
     public Future<HttpResponse> register(final Service record) throws JsonProcessingException {
         final String value = OBJECT_MAPPER.writeValueAsString(record);
 
+        log.info("Registering consul service Json: {}", value);
+
         final URI uri = URI.create(baseUri + REGISTER_ENDPOINT);
         final HttpPut request = new HttpPut(uri);
         request.setEntity(new StringEntity(value, "UTF-8"));

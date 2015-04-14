@@ -17,11 +17,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Mockito.verify;
+import static com.google.common.collect.Lists.newArrayList;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ServiceRegistrarTest {
-    private final static String CHECK_SCRIPT = "/bin/true";
-    private final static String CHECK_INTERVAL = "5s";
     private final static ServiceRegistration.Endpoint ENDPOINT =
             new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", null);
 
@@ -32,8 +31,13 @@ public class ServiceRegistrarTest {
     public void testRegister() throws Exception {
         ArgumentCaptor<Service> serviceCaptor = ArgumentCaptor.forClass(Service.class);
 
-        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, CHECK_SCRIPT, CHECK_INTERVAL);
-        registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT)));
+        String healthCheckTag = "healthCheckEndpoint::/health";
+
+        ServiceRegistration.Endpoint endpoint =
+                new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", newArrayList(healthCheckTag));
+
+        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
+        registrar.register(new ServiceRegistration(Arrays.asList(endpoint)));
         registrar.close();
 
         verify(consulClient).register(serviceCaptor.capture());
@@ -43,13 +47,39 @@ public class ServiceRegistrarTest {
         assertEquals("redis", service.getName());
         assertEquals(9000, service.getPort().intValue());
         assertTrue(service.getTags().contains("protocol-http"));
-        assertTrue(service.getCheck().getScript().startsWith(CHECK_SCRIPT));
-        assertEquals(CHECK_INTERVAL, service.getCheck().getInterval());
+        assertEquals("redis-http-9000", service.getCheck().getId());
+        assertEquals("HTTP health check for http://example.com:9000/health", service.getCheck().getName());
+        assertEquals("HTTP health check requesting http://example.com:9000/health every 10s",
+                service.getCheck().getNotes());
+        assertEquals("http://example.com:9000/health", service.getCheck().getHttp().toString());
+        assertEquals("10s", service.getCheck().getInterval());
+    }
+
+    @Test
+    public void testSetInterval() throws Exception {
+        ArgumentCaptor<Service> serviceCaptor = ArgumentCaptor.forClass(Service.class);
+
+        String healthCheckTag = "healthCheckEndpoint::/health";
+
+        ServiceRegistration.Endpoint endpoint =
+                new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", newArrayList(healthCheckTag));
+
+
+        System.setProperty(ConsulServiceRegistrar.HEALTH_CHECK_SYSTEM_PROPERTY, "42s");
+        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
+        registrar.register(new ServiceRegistration(Arrays.asList(endpoint)));
+        registrar.close();
+
+        verify(consulClient).register(serviceCaptor.capture());
+        verify(consulClient).close();
+
+        Service service = serviceCaptor.getValue();
+        assertEquals("42s", service.getCheck().getInterval());
     }
 
     @Test
     public void testUnregister() throws Exception {
-        ServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, CHECK_SCRIPT, CHECK_INTERVAL);
+        ServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
         ServiceRegistrationHandle handle = registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT)));
         registrar.unregister(handle);
         registrar.close();
@@ -63,7 +93,7 @@ public class ServiceRegistrarTest {
     public void testRegisterWithoutCheck() throws Exception {
         ArgumentCaptor<Service> serviceCaptor = ArgumentCaptor.forClass(Service.class);
 
-        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, null, null);
+        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
         registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT)));
         registrar.close();
 

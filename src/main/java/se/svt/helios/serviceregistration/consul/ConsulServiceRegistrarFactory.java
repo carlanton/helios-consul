@@ -28,52 +28,32 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ConsulServiceRegistrarFactory implements ServiceRegistrarFactory {
     private static final Logger log =
         LoggerFactory.getLogger(ConsulServiceRegistrarFactory.class);
 
-    private static final Pattern CONNECT_STRING_PATTERN = Pattern.compile("^(.+),(.+),(.+)$");
 
     @Override
-    public ServiceRegistrar create(final String connectString) {
+    public ServiceRegistrar create(final String consulUri) {
 
-        String baseUri;
-        String serviceCheckScript = null;
-        String serviceCheckInterval = null;
-
-        if (connectString == null || connectString.isEmpty()) {
+        if (consulUri == null || consulUri.isEmpty()) {
             throw new RuntimeException("Empty connect string!");
-        }
-
-        Matcher matcher = CONNECT_STRING_PATTERN.matcher(connectString);
-
-        if (matcher.matches()) {
-            baseUri = matcher.group(1);
-            serviceCheckScript = matcher.group(2);
-            serviceCheckInterval = matcher.group(3);
-        } else {
-            baseUri = connectString;
         }
 
         final URI uri;
 
         try {
-            uri = new URI(baseUri);
+            uri = new URI(consulUri);
         } catch (URISyntaxException e) {
-            throw new RuntimeException("baseUri is not a proper url", e);
+            throw new RuntimeException("consulUri is not a proper url", e);
         }
 
-        log.info("Creating new ConsulServiceRegistrar: " +
-                 "baseUri={}, checkScript={}, checkInterval={}",
-                 uri.toString(), serviceCheckScript, serviceCheckInterval);
+        log.info("Creating new ConsulServiceRegistrar: consulUri={}", uri.toString());
 
         final ConsulClient consulClient = new ConsulClient(uri.toString());
 
-        return new ConsulServiceRegistrar(consulClient, serviceCheckScript,
-                                          serviceCheckInterval);
+        return new ConsulServiceRegistrar(consulClient);
     }
 
     @Override
