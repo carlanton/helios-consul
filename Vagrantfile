@@ -27,15 +27,16 @@ wget -q -O /tmp/consul-web-ui.zip https://dl.bintray.com/mitchellh/consul/0.5.0_
 yes | unzip /tmp/consul.zip -d /usr/bin/
 yes | unzip /tmp/consul-web-ui.zip -d /usr/share/consul-web-ui
 
-echo 'description "Consul agent"\
-start on runlevel [2345]\
-stop on runlevel [!2345]\
-respawn\
-script\
-  export GOMAXPROCS=`nproc`\
-  exec /usr/bin/consul agent -server -bootstrap-expect 1 -client=0.0.0.0 -bind=0.0.0.0 -data-dir /var/lib/consul -ui-dir /usr/share/consul-web-ui/dist\
-end script\
-' > /etc/init/consul.conf
+cat <<EOF > /etc/init/consul.conf
+description "Consul agent"
+start on runlevel [2345]
+stop on runlevel [!2345]
+respawn
+script
+  export GOMAXPROCS=`nproc`
+  exec /usr/bin/consul agent -server -bootstrap-expect 1 -client=0.0.0.0 -bind=0.0.0.0 -data-dir /var/lib/consul -ui-dir /usr/share/consul-web-ui/dist
+end script
+EOF
 
 start consul
 
