@@ -44,12 +44,12 @@ start consul
 apt-get install -y helios helios-agent helios-master
 
 # Install helios-consul
-wget -q -O /tmp/helios-consul.deb 'https://github.com/SVT/helios-consul/releases/download/0.24/helios-consul_0.24_all.deb' && \
+wget -q -O /tmp/helios-consul.deb 'https://github.com/SVT/helios-consul/releases/download/0.25/helios-consul_0.25_all.deb' && \
 dpkg --force-confdef --force-confold -i /tmp/helios-consul.deb ;
 
 # Setup helios agent to use helios-consul
 echo 'ENABLED=true \
-HELIOS_AGENT_OPTS="--service-registry http://127.0.0.1:8500 --service-registrar-plugin /usr/share/helios/lib/plugins/helios-consul-0.24.jar"' > /etc/default/helios-agent
+HELIOS_AGENT_OPTS="--service-registry http://127.0.0.1:8500 --service-registrar-plugin /usr/share/helios/lib/plugins/helios-consul-0.25.jar"' > /etc/default/helios-agent
 restart helios-agent
 
 # Good stuff for the vagrant user
