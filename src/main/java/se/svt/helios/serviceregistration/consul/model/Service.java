@@ -121,8 +121,8 @@ public class Service {
             return this;
         }
 
-        public Builder setCheck(String script, String interval) {
-            this.check = new ServiceCheck(script, interval);
+        public Builder setCheck(ServiceCheck check) {
+            this.check = check;
             return this;
         }
 

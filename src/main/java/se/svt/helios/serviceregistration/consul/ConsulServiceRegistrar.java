@@ -31,9 +31,16 @@ import com.spotify.helios.serviceregistration.ServiceRegistration;
 import com.spotify.helios.serviceregistration.ServiceRegistrationHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import se.svt.helios.serviceregistration.consul.model.AgentService;
 import se.svt.helios.serviceregistration.consul.model.Service;
+import se.svt.helios.serviceregistration.consul.model.ServiceCheck;
 
-import java.util.*;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -41,36 +48,41 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.google.common.collect.Lists.newArrayList;
+
 public class ConsulServiceRegistrar implements ServiceRegistrar {
     private static final Logger log = LoggerFactory.getLogger(ConsulServiceRegistrar.class);
     public static final String HELIOS_DEPLOYED_TAG = "helios-deployed";
     private static final Pattern ENDPOINT_NAME_PATTERN =
-        Pattern.compile("(?<name>.+)-(?<tag>v\\d+)$");
+            Pattern.compile("(?<name>.+)-(?<tag>v\\d+)$");
     private static final int CONSUL_UPDATE_INTERVAL = 30; // seconds
+
+    public static final String HEALTH_CHECK_SYSTEM_PROPERTY = "helios-consul.healthCheckInterval";
+    private static final String DEFAULT_HEALTH_CHECK_INTERVAL = "10s";
+    private static final String HEALTH_CHECK_ENDPOINT_TAGKEY = "healthCheckEndpoint";
+    private String healthCheckInterval = "";
 
     private final Map<ServiceRegistrationHandle, ServiceRegistration> handles;
     private final Set<String> endpoints;
 
     private final ScheduledExecutorService executor;
     private final ConsulClient consulClient;
-    private final String serviceCheckScript;
-    private final String serviceCheckInterval;
 
-    public ConsulServiceRegistrar(final ConsulClient consulClient, final String serviceCheckScript,
-                                  final String serviceCheckInterval) {
+    public ConsulServiceRegistrar(final ConsulClient consulClient) {
         this.consulClient = consulClient;
-        this.serviceCheckScript = serviceCheckScript;
-        this.serviceCheckInterval = serviceCheckInterval;
 
         this.handles = Maps.newConcurrentMap();
         this.endpoints = Sets.newConcurrentHashSet();
+
+        this.healthCheckInterval =
+                System.getProperty(HEALTH_CHECK_SYSTEM_PROPERTY, DEFAULT_HEALTH_CHECK_INTERVAL);
 
         this.executor = MoreExecutors.getExitingScheduledExecutorService(
                           (ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(1,
                           new ThreadFactoryBuilder().setNameFormat("consul-registrar-%d").build()),
                           0, TimeUnit.SECONDS);
 
-        // If the Consul agent is restarted, all services will forgotten. Therefore we sync the
+        // If the Consul agent is restarted, all services will be forgotten. Therefore we sync the
         // state between services known by this plugin and services registered in Consul.
         Runnable registrationRunnable = new Runnable() {
             @Override
@@ -130,19 +142,32 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
     }
 
     private void sendRegistration(ServiceRegistration registration)
-            throws JsonProcessingException {
+            throws JsonProcessingException, MalformedURLException {
 
         for (final ServiceRegistration.Endpoint endpoint : registration.getEndpoints()) {
-            List<String> tags = new ArrayList<>();
+            // Indicate that this service is deployed by Helios
+            List<String> tags = newArrayList(HELIOS_DEPLOYED_TAG);
+
+            // Map that contains special key, value tags
+            Map<String, String> kvTags = new HashMap<>();
+
+            if (endpoint.getTags() != null) {
+                for (String tag : endpoint.getTags()) {
+                    if (tag.contains("::")) {
+                        String[] kv = tag.split("::");
+                        kvTags.put(kv[0], kv[1]);
+                    } else {
+                        tags.add(tag);
+                    }
+                }
+            }
+
 
             // Add version as a tag
             String versionTag = getVersionTag(endpoint.getName());
             if (versionTag != null) {
                 tags.add(versionTag);
             }
-
-            // Indicate that this service is deployed by Helios
-            tags.add(HELIOS_DEPLOYED_TAG);
 
             // Add the protocol as a tag
             tags.add(String.format("protocol-%s", endpoint.getProtocol()));
@@ -155,12 +180,24 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
                     .setPort(endpoint.getPort())
                     .setTags(tags);
 
-            if (serviceCheckScript != null) {
-                String script = String.format("%s %s %s %s", serviceCheckScript,
-                        endpoint.getHost(), endpoint.getPort(), endpoint.getProtocol());
+            if (kvTags.containsKey(HEALTH_CHECK_ENDPOINT_TAGKEY)) {
+                URL url = new URL(endpoint.getProtocol(), endpoint.getHost(), endpoint.getPort(),
+                        kvTags.get(HEALTH_CHECK_ENDPOINT_TAGKEY));
 
-                recordBuilder.setCheck(script, serviceCheckInterval);
+                ServiceCheck.Builder checkBuilder = ServiceCheck.builder()
+                        .setId(String.format("%s-%s-%s",
+                                endpoint.getName(), endpoint.getProtocol(), endpoint.getPort()))
+                        .setName(String.format("HTTP health check for %s", url.toString()))
+                        .setHttp(url)
+                        .setInterval(healthCheckInterval)
+                        .setNotes(String.format("HTTP health check requesting %s every %s",
+                                url.toString(), healthCheckInterval));
+
+                recordBuilder.setCheck(checkBuilder.build());
+
+                log.info("Creating health check for {}", url.toString());
             }
+
             consulClient.register(recordBuilder.build());
         }
     }
@@ -196,7 +233,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
 
     void syncState() {
         // 1. List all my services with tag HELIOS_DEPLOYED_TAG
-        List<String> registeredServices = null;
+        Map<String, AgentService> registeredServices = null;
         try {
             registeredServices = consulClient.getAgentServicesWithTag(HELIOS_DEPLOYED_TAG);
         } catch (Exception e) {
@@ -208,7 +245,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
         }
 
         // 2. De-register all services not known by Helios
-        for (String service : registeredServices) {
+        for (String service : registeredServices.keySet()) {
             if (!endpoints.contains(service)) {
                 log.info("Service '{}' not known by Helios. Sending deregistration.", service);
                 consulClient.deregister(service);
@@ -218,7 +255,7 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
         // 3. Register all services not known by Consul
         for (ServiceRegistration handle : handles.values()) {
             for (ServiceRegistration.Endpoint endpoint : handle.getEndpoints()) {
-                if (!registeredServices.contains(endpoint.getName())) {
+                if (!registeredServices.containsKey(endpoint.getName())) {
                     log.info("Service '{}' not known by Consul. Re-registering Helios job.",
                              endpoint.getName());
                     try {
@@ -230,14 +267,6 @@ public class ConsulServiceRegistrar implements ServiceRegistrar {
                 }
             }
         }
-    }
-
-    String getServiceCheckInterval() {
-        return serviceCheckInterval;
-    }
-
-    String getServiceCheckScript() {
-        return serviceCheckScript;
     }
 
     ConsulClient getConsulClient() {
