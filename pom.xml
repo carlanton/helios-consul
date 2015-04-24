@@ -20,7 +20,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <helios.version>0.8.274</helios.version>
+        <helios.version>0.8.298</helios.version>
     </properties>
 
     <dependencies>

@@ -14,7 +14,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ConsulClientITCase {
-	private static final String TAG = ConsulServiceRegistrar.HELIOS_DEPLOYED_TAG;
+	private static final String TAG = ConsulServiceRegistrarFactory.createConfig().getDeployTag();
 
 	private ConsulServiceRegistrar newRegistrar() {
 		ConsulServiceRegistrarFactory serviceRegistrarFactory = new ConsulServiceRegistrarFactory();

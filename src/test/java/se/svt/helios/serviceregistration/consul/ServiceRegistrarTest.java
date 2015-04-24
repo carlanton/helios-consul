@@ -8,6 +8,7 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
+import se.svt.helios.serviceregistration.consul.model.RegistrarConfig;
 import se.svt.helios.serviceregistration.consul.model.Service;
 
 import java.util.Arrays;
@@ -21,8 +22,12 @@ import static com.google.common.collect.Lists.newArrayList;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ServiceRegistrarTest {
-    private final static ServiceRegistration.Endpoint ENDPOINT =
-            new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", null);
+    private final static ServiceRegistration.Endpoint ENDPOINT_WITHOUT_TAGS =
+            new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", null, null);
+
+    private final static ServiceRegistration.Endpoint ENDPOINT_CHECK_FROM_TAG =
+            new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com",
+                    newArrayList("healthCheckEndpoint::/health"), null);
 
     @Mock
     ConsulClient consulClient;
@@ -31,13 +36,9 @@ public class ServiceRegistrarTest {
     public void testRegister() throws Exception {
         ArgumentCaptor<Service> serviceCaptor = ArgumentCaptor.forClass(Service.class);
 
-        String healthCheckTag = "healthCheckEndpoint::/health";
-
-        ServiceRegistration.Endpoint endpoint =
-                new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", newArrayList(healthCheckTag));
-
-        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
-        registrar.register(new ServiceRegistration(Arrays.asList(endpoint)));
+        RegistrarConfig config = ConsulServiceRegistrarFactory.createConfig();
+        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, config);
+        registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT_CHECK_FROM_TAG)));
         registrar.close();
 
         verify(consulClient).register(serviceCaptor.capture());
@@ -51,7 +52,7 @@ public class ServiceRegistrarTest {
         assertEquals("HTTP health check for http://example.com:9000/health", service.getCheck().getName());
         assertEquals("HTTP health check requesting http://example.com:9000/health every 10s",
                 service.getCheck().getNotes());
-        assertEquals("http://example.com:9000/health", service.getCheck().getHttp().toString());
+        assertEquals("http://example.com:9000/health", service.getCheck().getHttp());
         assertEquals("10s", service.getCheck().getInterval());
     }
 
@@ -59,15 +60,9 @@ public class ServiceRegistrarTest {
     public void testSetInterval() throws Exception {
         ArgumentCaptor<Service> serviceCaptor = ArgumentCaptor.forClass(Service.class);
 
-        String healthCheckTag = "healthCheckEndpoint::/health";
-
-        ServiceRegistration.Endpoint endpoint =
-                new ServiceRegistration.Endpoint("redis", "http", 9000, "local", "example.com", newArrayList(healthCheckTag));
-
-
-        System.setProperty(ConsulServiceRegistrar.HEALTH_CHECK_SYSTEM_PROPERTY, "42s");
-        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
-        registrar.register(new ServiceRegistration(Arrays.asList(endpoint)));
+        RegistrarConfig config = new RegistrarConfig(10, 42, "helios-deploy");
+        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, config);
+        registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT_CHECK_FROM_TAG)));
         registrar.close();
 
         verify(consulClient).register(serviceCaptor.capture());
@@ -79,13 +74,14 @@ public class ServiceRegistrarTest {
 
     @Test
     public void testUnregister() throws Exception {
-        ServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
-        ServiceRegistrationHandle handle = registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT)));
+        RegistrarConfig config = ConsulServiceRegistrarFactory.createConfig();
+        ServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, config);
+        ServiceRegistrationHandle handle = registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT_WITHOUT_TAGS)));
         registrar.unregister(handle);
         registrar.close();
 
         verify(consulClient).register((Service) anyObject());
-        verify(consulClient).deregister(ENDPOINT.getName());
+        verify(consulClient).deregister(ENDPOINT_WITHOUT_TAGS.getName());
         verify(consulClient).close();
     }
 
@@ -93,8 +89,9 @@ public class ServiceRegistrarTest {
     public void testRegisterWithoutCheck() throws Exception {
         ArgumentCaptor<Service> serviceCaptor = ArgumentCaptor.forClass(Service.class);
 
-        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient);
-        registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT)));
+        RegistrarConfig config = ConsulServiceRegistrarFactory.createConfig();
+        ConsulServiceRegistrar registrar = new ConsulServiceRegistrar(consulClient, config);
+        registrar.register(new ServiceRegistration(Arrays.asList(ENDPOINT_WITHOUT_TAGS)));
         registrar.close();
 
         verify(consulClient).register(serviceCaptor.capture());
@@ -106,18 +103,4 @@ public class ServiceRegistrarTest {
         assertTrue(service.getTags().contains("protocol-http"));
         assertNull(service.getCheck());
     }
-
-	@Test
-	public void testGetServiceName() throws Exception {
-		assertEquals("x", ConsulServiceRegistrar.getServiceName("x-v1"));
-		assertEquals("some-random-service", ConsulServiceRegistrar.getServiceName("some-random-service-v491"));
-		assertEquals("a-service-without-version", ConsulServiceRegistrar.getServiceName("a-service-without-version"));
-	}
-
-	@Test
-	public void testGetVersionTag() throws Exception {
-		assertEquals("v1", ConsulServiceRegistrar.getVersionTag("x-v1"));
-		assertEquals("v491", ConsulServiceRegistrar.getVersionTag("some-random-service-v491"));
-		assertNull(ConsulServiceRegistrar.getVersionTag("a-service-without-version"));
-	}
 }
