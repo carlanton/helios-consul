@@ -25,21 +25,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.google.common.base.Objects;
 
-import java.net.URL;
-
 @JsonPropertyOrder({"http", "interval"})
 public class ServiceCheck {
-    private final URL http;
+    private final String http;
     private final String interval;
     private final String name;
     private final String notes;
-
-
     private final String id;
 
     public ServiceCheck(@JsonProperty("id") String id,
                         @JsonProperty("name") String name,
-                        @JsonProperty("http") URL http,
+                        @JsonProperty("http") String http,
                         @JsonProperty("interval") String interval,
                         @JsonProperty("notes") String notes) {
         this.http = http;
@@ -49,7 +45,7 @@ public class ServiceCheck {
         this.id = id;
     }
 
-    public URL getHttp() {
+    public String getHttp() {
         return http;
     }
 
@@ -76,7 +72,7 @@ public class ServiceCheck {
     public static class Builder {
         private String id = null;
         private String name = null;
-        private URL http = null;
+        private String http = null;
         private String interval = null;
         private String notes = null;
 
@@ -93,7 +89,7 @@ public class ServiceCheck {
             return this;
         }
 
-        public Builder setHttp(URL http) {
+        public Builder setHttp(String http) {
             this.http = http;
             return this;
         }
