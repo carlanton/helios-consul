@@ -4,7 +4,7 @@
 
     <groupId>se.svt</groupId>
     <artifactId>helios-consul</artifactId>
-    <version>0.26-SNAPSHOT</version>
+    <version>0.26</version>
     <packaging>jar</packaging>
 
     <name>helios-consul</name>
@@ -222,6 +222,6 @@
     <scm>
         <connection>scm:git:git@github.com:SVT/helios-consul.git</connection>
         <url>https://github.com/SVT/helios-consul</url>
-        <tag>HEAD</tag>
+        <tag>0.26</tag>
     </scm>
 </project>
